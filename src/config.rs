@@ -60,10 +60,16 @@ pub fn config_path() -> PathBuf {
 pub fn load() -> Result<Config> {
     let path = config_path();
     if !path.exists() {
-        anyhow::bail!(
-            "config not found at {}\nRun `qwen-tts config init` to create one.",
+        // Auto-initialize on first use
+        let cfg = Config::default();
+        ensure_dirs(&cfg)?;
+        save(&cfg)?;
+        eprintln!(
+            "First run — config created at {}",
             path.display()
         );
+        eprintln!("Platform: {}", platform::platform_summary());
+        return Ok(cfg);
     }
     let text = fs::read_to_string(&path)
         .with_context(|| format!("failed to read {}", path.display()))?;
@@ -74,6 +80,14 @@ pub fn load() -> Result<Config> {
 
 pub fn load_or_default() -> Config {
     load().unwrap_or_default()
+}
+
+fn ensure_dirs(cfg: &Config) -> Result<()> {
+    for dir in [&cfg.models_dir, &cfg.voices_dir, &cfg.output_dir] {
+        fs::create_dir_all(dir)
+            .with_context(|| format!("failed to create directory {dir}"))?;
+    }
+    Ok(())
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
@@ -89,13 +103,7 @@ pub fn save(cfg: &Config) -> Result<()> {
 
 pub fn init() -> Result<()> {
     let cfg = Config::default();
-
-    // Create directory structure
-    for dir in [&cfg.models_dir, &cfg.voices_dir, &cfg.output_dir] {
-        fs::create_dir_all(dir)
-            .with_context(|| format!("failed to create directory {dir}"))?;
-    }
-
+    ensure_dirs(&cfg)?;
     save(&cfg)?;
     println!("Config initialized at {}", config_path().display());
     println!("Platform: {}", platform::platform_summary());
