@@ -155,6 +155,13 @@ enum ModelsAction {
         #[arg(long, default_value = "pro")]
         variant: String,
     },
+
+    /// Update model to the latest release
+    Update {
+        /// Model variant to update (defaults to configured variant)
+        #[arg(long)]
+        variant: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -246,6 +253,7 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Models { action } => match action {
             ModelsAction::List => models::list(),
             ModelsAction::Download { variant } => models::download(&variant),
+            ModelsAction::Update { variant } => models::update(variant.as_deref()),
         },
 
         Commands::Config { action } => match action {

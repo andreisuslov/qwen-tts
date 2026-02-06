@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::models;
 use crate::platform::{self, Backend};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +70,8 @@ pub fn load() -> Result<Config> {
             path.display()
         );
         eprintln!("Platform: {}", platform::platform_summary());
+        eprintln!();
+        models::auto_download_if_needed(&cfg);
         return Ok(cfg);
     }
     let text = fs::read_to_string(&path)
