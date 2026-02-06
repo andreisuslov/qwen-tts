@@ -4,6 +4,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use crate::config::{self, Config};
+use crate::editor;
 use crate::output;
 use crate::platform::Backend;
 
@@ -42,7 +43,13 @@ fn resolve_text(text: Option<&str>, file: Option<&str>) -> Result<String> {
             fs::read_to_string(&path)
                 .with_context(|| format!("failed to read text file: {}", path.display()))
         }
-        (None, None) => anyhow::bail!("provide either --text or --file"),
+        (None, None) => {
+            // Open TUI editor for multi-line input
+            match editor::open("Enter text (multi-line)")? {
+                Some(t) if !t.is_empty() => Ok(t),
+                _ => anyhow::bail!("no text provided (editor cancelled)"),
+            }
+        }
     }
 }
 
