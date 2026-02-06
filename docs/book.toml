@@ -1,0 +1,10 @@
+[book]
+authors = ["Andrei Suslov"]
+language = "en"
+multilingual = false
+src = "src"
+title = "qwen-tts Documentation"
+
+[output.html]
+default-theme = "navy"
+git-repository-url = "https://github.com/andreisuslov/qwen-tts"

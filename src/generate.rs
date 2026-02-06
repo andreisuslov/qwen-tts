@@ -1,0 +1,268 @@
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+use anyhow::{Context, Result};
+use crate::config::{self, Config};
+use crate::output;
+use crate::platform::Backend;
+
+pub struct SpeakArgs {
+    pub text: Option<String>,
+    pub file: Option<String>,
+    pub voice: Option<String>,
+    pub emotion: Option<String>,
+    pub speed: Option<f32>,
+    pub output: Option<String>,
+}
+
+pub struct DesignArgs {
+    pub description: String,
+    pub text: Option<String>,
+    pub file: Option<String>,
+    pub speed: Option<f32>,
+    pub output: Option<String>,
+}
+
+pub struct CloneArgs {
+    pub ref_audio: Option<String>,
+    pub ref_text: Option<String>,
+    pub voice: Option<String>,
+    pub text: Option<String>,
+    pub file: Option<String>,
+    pub speed: Option<f32>,
+    pub output: Option<String>,
+}
+
+fn resolve_text(text: Option<&str>, file: Option<&str>) -> Result<String> {
+    match (text, file) {
+        (Some(t), _) => Ok(t.to_string()),
+        (None, Some(f)) => {
+            let path = config::expand_path(f);
+            fs::read_to_string(&path)
+                .with_context(|| format!("failed to read text file: {}", path.display()))
+        }
+        (None, None) => anyhow::bail!("provide either --text or --file"),
+    }
+}
+
+fn resolve_output(output: Option<&str>, cfg: &Config) -> PathBuf {
+    match output {
+        Some(p) => config::expand_path(p),
+        None => {
+            let dir = config::expand_path(&cfg.output_dir);
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            dir.join(format!("tts_{ts}.wav"))
+        }
+    }
+}
+
+fn model_path(cfg: &Config) -> PathBuf {
+    let models_dir = config::expand_path(&cfg.models_dir);
+    models_dir.join(&cfg.model_variant)
+}
+
+pub fn speak(args: SpeakArgs) -> Result<()> {
+    let cfg = config::load()?;
+    let text = resolve_text(args.text.as_deref(), args.file.as_deref())?;
+    let out = resolve_output(args.output.as_deref(), &cfg);
+    let voice = args.voice.as_deref().unwrap_or(&cfg.default_voice);
+    let speed = args.speed.unwrap_or(cfg.default_speed);
+
+    // Build instruct text for voice personality
+    let instruct = match &args.emotion {
+        Some(emo) => format!("Speak as {voice} with {emo} emotion."),
+        None => format!("Speak as {voice}."),
+    };
+
+    output::status("Generating", &format!("speech with {voice} voice..."));
+
+    let status = run_tts_command(&cfg, &text, &instruct, speed, &out, None, None)?;
+
+    if !status.success() {
+        anyhow::bail!("TTS generation failed");
+    }
+
+    output::success(&format!("Saved to {}", out.display()));
+
+    if cfg.auto_play {
+        play_audio(&out)?;
+    }
+
+    Ok(())
+}
+
+pub fn design(args: DesignArgs) -> Result<()> {
+    let cfg = config::load()?;
+    let text = resolve_text(args.text.as_deref(), args.file.as_deref())?;
+    let out = resolve_output(args.output.as_deref(), &cfg);
+    let speed = args.speed.unwrap_or(cfg.default_speed);
+
+    let instruct = args.description;
+
+    output::status("Designing", "voice from description...");
+
+    let status = run_tts_command(&cfg, &text, &instruct, speed, &out, None, None)?;
+
+    if !status.success() {
+        anyhow::bail!("TTS generation failed");
+    }
+
+    output::success(&format!("Saved to {}", out.display()));
+
+    if cfg.auto_play {
+        play_audio(&out)?;
+    }
+
+    Ok(())
+}
+
+pub fn clone(args: CloneArgs) -> Result<()> {
+    let cfg = config::load()?;
+    let text = resolve_text(args.text.as_deref(), args.file.as_deref())?;
+    let out = resolve_output(args.output.as_deref(), &cfg);
+    let speed = args.speed.unwrap_or(cfg.default_speed);
+
+    // Resolve reference audio — either from --ref or --voice (saved voice)
+    let (ref_audio, ref_text) = if let Some(voice_name) = &args.voice {
+        let voices_dir = config::expand_path(&cfg.voices_dir);
+        let wav = voices_dir.join(format!("{voice_name}.wav"));
+        let txt = voices_dir.join(format!("{voice_name}.txt"));
+        if !wav.exists() {
+            anyhow::bail!("voice '{voice_name}' not found (no {}.wav in voices dir)", voice_name);
+        }
+        let transcript = if txt.exists() {
+            Some(fs::read_to_string(&txt).context("failed to read voice transcript")?)
+        } else {
+            args.ref_text.clone()
+        };
+        (wav.to_string_lossy().to_string(), transcript)
+    } else if let Some(ref_path) = &args.ref_audio {
+        (ref_path.clone(), args.ref_text.clone())
+    } else {
+        anyhow::bail!("provide either --ref <audio_file> or --voice <saved_voice>");
+    };
+
+    output::status("Cloning", "voice from reference audio...");
+
+    let status = run_tts_command(
+        &cfg,
+        &text,
+        "Clone the voice from the reference audio.",
+        speed,
+        &out,
+        Some(&ref_audio),
+        ref_text.as_deref(),
+    )?;
+
+    if !status.success() {
+        anyhow::bail!("TTS generation failed");
+    }
+
+    output::success(&format!("Saved to {}", out.display()));
+
+    if cfg.auto_play {
+        play_audio(&out)?;
+    }
+
+    Ok(())
+}
+
+fn run_tts_command(
+    cfg: &Config,
+    text: &str,
+    instruct: &str,
+    speed: f32,
+    output_path: &PathBuf,
+    ref_audio: Option<&str>,
+    ref_text: Option<&str>,
+) -> Result<std::process::ExitStatus> {
+    let python = config::expand_path(&cfg.python_path);
+    let model = model_path(cfg);
+
+    // Ensure output directory exists
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut cmd = Command::new(python.to_string_lossy().as_ref());
+
+    match cfg.backend {
+        Backend::Mlx => {
+            cmd.args(["-m", "mlx_audio.tts.generate"]);
+        }
+        Backend::Cuda | Backend::Cpu => {
+            let script = config::base_dir().join("generate_compat.py");
+            cmd.arg(script.to_string_lossy().as_ref());
+        }
+    }
+
+    cmd.args(["--model", &model.to_string_lossy()]);
+    cmd.args(["--text", text]);
+    cmd.args(["--instruct", instruct]);
+    cmd.args(["--speed", &speed.to_string()]);
+    cmd.args(["--output_path", &output_path.to_string_lossy()]);
+
+    if let Some(ref_audio) = ref_audio {
+        cmd.args(["--ref_audio", ref_audio]);
+    }
+    if let Some(ref_text) = ref_text {
+        cmd.args(["--ref_text", ref_text]);
+    }
+
+    cmd.stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .context("failed to run TTS command")
+}
+
+fn play_audio(path: &PathBuf) -> Result<()> {
+    output::status("Playing", &path.to_string_lossy());
+
+    let status = if cfg!(target_os = "macos") {
+        Command::new("afplay")
+            .arg(path.to_string_lossy().as_ref())
+            .status()
+    } else if cfg!(target_os = "windows") {
+        Command::new("powershell")
+            .args([
+                "-c",
+                &format!(
+                    "(New-Object Media.SoundPlayer '{}').PlaySync()",
+                    path.display()
+                ),
+            ])
+            .status()
+    } else {
+        // Linux: try aplay, then paplay, then ffplay
+        Command::new("aplay")
+            .arg(path.to_string_lossy().as_ref())
+            .status()
+            .or_else(|_| {
+                Command::new("paplay")
+                    .arg(path.to_string_lossy().as_ref())
+                    .status()
+            })
+            .or_else(|_| {
+                Command::new("ffplay")
+                    .args(["-nodisp", "-autoexit"])
+                    .arg(path.to_string_lossy().as_ref())
+                    .status()
+            })
+    };
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        Ok(_) => {
+            output::warn("Audio playback finished with non-zero exit code");
+            Ok(())
+        }
+        Err(e) => {
+            output::warn(&format!("Could not play audio: {e}"));
+            Ok(())
+        }
+    }
+}

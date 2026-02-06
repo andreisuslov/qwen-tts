@@ -1,0 +1,15 @@
+[package]
+name = "qwen-tts"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform CLI for Qwen3-TTS text-to-speech with voice cloning"
+license = "MIT"
+repository = "https://github.com/andreisuslov/qwen-tts"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+colored = "2"
+anyhow = "1"
+dirs = "5"
