@@ -54,6 +54,8 @@ qwen-tts config set default_speed 1.2
 qwen-tts config set auto_play false
 qwen-tts config set backend cuda
 qwen-tts config set model_variant lite
+qwen-tts config set auto_cleanup false
+qwen-tts config set cleanup_age_hours 48
 ```
 
 ## Configuration Keys
@@ -69,5 +71,7 @@ qwen-tts config set model_variant lite
 | `default_speed` | float | `1.0` | Default speech speed multiplier. |
 | `auto_play` | bool | `true` | Automatically play audio after generation. |
 | `model_variant` | string | `pro` | Active model variant: `pro` or `lite`. |
+| `auto_cleanup` | bool | `true` | Automatically delete old output files on each run. |
+| `cleanup_age_hours` | integer | `24` | Minimum age in hours before an output file is cleaned up. |
 
 For a detailed description of each key, see [Configuration](../configuration.md).
