@@ -55,13 +55,8 @@ pub fn add(name: &str, ref_audio: &str, transcript: Option<&str>) -> Result<()> 
     }
 
     let dest_wav = voices_dir.join(format!("{name}.wav"));
-    fs::copy(&src, &dest_wav).with_context(|| {
-        format!(
-            "failed to copy {} → {}",
-            src.display(),
-            dest_wav.display()
-        )
-    })?;
+    fs::copy(&src, &dest_wav)
+        .with_context(|| format!("failed to copy {} → {}", src.display(), dest_wav.display()))?;
 
     if let Some(t) = transcript {
         let dest_txt = voices_dir.join(format!("{name}.txt"));

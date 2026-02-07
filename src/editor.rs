@@ -43,20 +43,23 @@ fn run_editor(
 
     loop {
         terminal.draw(|frame| {
-            let chunks = Layout::vertical([
-                Constraint::Min(5),
-                Constraint::Length(2),
-            ])
-            .split(frame.area());
+            let chunks =
+                Layout::vertical([Constraint::Min(5), Constraint::Length(2)]).split(frame.area());
 
             frame.render_widget(&textarea, chunks[0]);
 
             let help = Paragraph::new(vec![Line::from(vec![
-                Span::styled(" Ctrl+D ", Style::default().fg(Color::Black).bg(Color::Cyan)),
+                Span::styled(
+                    " Ctrl+D ",
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ),
                 Span::raw(" Submit  "),
                 Span::styled(" Esc ", Style::default().fg(Color::Black).bg(Color::Red)),
                 Span::raw(" Cancel  "),
-                Span::styled(" Enter ", Style::default().fg(Color::Black).bg(Color::DarkGray)),
+                Span::styled(
+                    " Enter ",
+                    Style::default().fg(Color::Black).bg(Color::DarkGray),
+                ),
                 Span::raw(" New line"),
             ])]);
             frame.render_widget(help, chunks[1]);
