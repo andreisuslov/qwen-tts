@@ -26,6 +26,8 @@ default_voice = "Vivian"
 default_speed = 1.0
 auto_play = true
 model_variant = "pro"
+auto_cleanup = true
+cleanup_age_hours = 24
 ```
 
 ## Key Descriptions
@@ -77,6 +79,14 @@ Set to `false` to disable automatic playback.
 ### model_variant
 
 The active model variant: `"pro"` for full precision or `"lite"` for the quantized version. This determines which subdirectory under `models_dir` is used for inference. Must be either `pro` or `lite`.
+
+### auto_cleanup
+
+When `true`, old output files in `output_dir` are automatically deleted at the start of each run. Only files older than `cleanup_age_hours` are removed. Set to `false` to keep all generated files indefinitely.
+
+### cleanup_age_hours
+
+The minimum age (in hours) an output file must reach before it is eligible for automatic cleanup. Only takes effect when `auto_cleanup` is `true`. For example, the default value of `24` means files older than 24 hours are deleted on the next run.
 
 ## Editing the Config File Directly
 

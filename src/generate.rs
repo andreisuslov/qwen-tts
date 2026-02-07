@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::SystemTime;
 
 use crate::config::{self, Config};
 use crate::editor;
@@ -8,6 +9,49 @@ use crate::models;
 use crate::output;
 use crate::platform::Backend;
 use anyhow::{Context, Result};
+
+fn cleanup_old_outputs(cfg: &Config) {
+    if !cfg.auto_cleanup {
+        return;
+    }
+
+    let output_dir = config::expand_path(&cfg.output_dir);
+    let entries = match fs::read_dir(&output_dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    let max_age = std::time::Duration::from_secs(u64::from(cfg.cleanup_age_hours) * 3600);
+    let now = SystemTime::now();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let metadata = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let modified = match metadata.modified() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let age = match now.duration_since(modified) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        if age > max_age {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if metadata.is_dir() {
+                let _ = fs::remove_dir_all(&path);
+            } else {
+                let _ = fs::remove_file(&path);
+            }
+            output::status("Cleanup", &format!("removed old output: {name}"));
+        }
+    }
+}
 
 pub struct SpeakArgs {
     pub text: Option<String>,
@@ -107,6 +151,7 @@ fn model_id(cfg: &Config) -> Result<String> {
 
 pub fn speak(args: SpeakArgs) -> Result<()> {
     let cfg = config::load()?;
+    cleanup_old_outputs(&cfg);
     let text = resolve_text(args.text.as_deref(), args.file.as_deref())?;
     let out = resolve_output(args.output.as_deref(), &cfg);
     let voice = args.voice.as_deref().unwrap_or(&cfg.default_voice);
@@ -149,6 +194,7 @@ pub fn speak(args: SpeakArgs) -> Result<()> {
 
 pub fn design(args: DesignArgs) -> Result<()> {
     let cfg = config::load()?;
+    cleanup_old_outputs(&cfg);
     let text = resolve_text(args.text.as_deref(), args.file.as_deref())?;
     let out = resolve_output(args.output.as_deref(), &cfg);
     let speed = args.speed.unwrap_or(cfg.default_speed);
@@ -186,6 +232,7 @@ pub fn design(args: DesignArgs) -> Result<()> {
 
 pub fn clone(args: CloneArgs) -> Result<()> {
     let cfg = config::load()?;
+    cleanup_old_outputs(&cfg);
     let text = resolve_text(args.text.as_deref(), args.file.as_deref())?;
     let out = resolve_output(args.output.as_deref(), &cfg);
     let speed = args.speed.unwrap_or(cfg.default_speed);

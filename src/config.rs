@@ -18,6 +18,18 @@ pub struct Config {
     pub default_speed: f32,
     pub auto_play: bool,
     pub model_variant: String,
+    #[serde(default = "default_auto_cleanup")]
+    pub auto_cleanup: bool,
+    #[serde(default = "default_cleanup_age_hours")]
+    pub cleanup_age_hours: u32,
+}
+
+fn default_auto_cleanup() -> bool {
+    true
+}
+
+fn default_cleanup_age_hours() -> u32 {
+    24
 }
 
 impl Default for Config {
@@ -39,6 +51,8 @@ impl Default for Config {
             default_speed: 1.0,
             auto_play: true,
             model_variant: "base".to_string(),
+            auto_cleanup: true,
+            cleanup_age_hours: 24,
         }
     }
 }
@@ -150,6 +164,16 @@ pub fn set(key: &str, value: &str) -> Result<()> {
                 anyhow::bail!("model_variant must be one of: {}", valid.join(", "));
             }
             cfg.model_variant = value.to_string();
+        }
+        "auto_cleanup" => {
+            cfg.auto_cleanup = value
+                .parse()
+                .with_context(|| format!("invalid bool: {value}"))?;
+        }
+        "cleanup_age_hours" => {
+            cfg.cleanup_age_hours = value
+                .parse()
+                .with_context(|| format!("invalid u32: {value}"))?;
         }
         _ => anyhow::bail!("unknown config key: {key}"),
     }
