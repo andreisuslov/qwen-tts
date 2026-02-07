@@ -95,7 +95,18 @@ pub fn speak(args: SpeakArgs) -> Result<()> {
 
     output::status("Generating", &format!("speech with {voice} voice..."));
 
-    let status = run_tts_command(&cfg, &text, &instruct, speed, &out, None, None)?;
+    let status = run_tts_command(
+        &cfg,
+        &TtsParams {
+            text: &text,
+            instruct: &instruct,
+            speed,
+            output_path: &out,
+            ref_audio: None,
+            ref_text: None,
+            voice: Some(voice),
+        },
+    )?;
 
     if !status.success() {
         anyhow::bail!("TTS generation failed");
@@ -120,7 +131,18 @@ pub fn design(args: DesignArgs) -> Result<()> {
 
     output::status("Designing", "voice from description...");
 
-    let status = run_tts_command(&cfg, &text, &instruct, speed, &out, None, None)?;
+    let status = run_tts_command(
+        &cfg,
+        &TtsParams {
+            text: &text,
+            instruct: &instruct,
+            speed,
+            output_path: &out,
+            ref_audio: None,
+            ref_text: None,
+            voice: None,
+        },
+    )?;
 
     if !status.success() {
         anyhow::bail!("TTS generation failed");
@@ -168,12 +190,15 @@ pub fn clone(args: CloneArgs) -> Result<()> {
 
     let status = run_tts_command(
         &cfg,
-        &text,
-        "Clone the voice from the reference audio.",
-        speed,
-        &out,
-        Some(&ref_audio),
-        ref_text.as_deref(),
+        &TtsParams {
+            text: &text,
+            instruct: "Clone the voice from the reference audio.",
+            speed,
+            output_path: &out,
+            ref_audio: Some(&ref_audio),
+            ref_text: ref_text.as_deref(),
+            voice: None,
+        },
     )?;
 
     if !status.success() {
@@ -189,20 +214,22 @@ pub fn clone(args: CloneArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_tts_command(
-    cfg: &Config,
-    text: &str,
-    instruct: &str,
+struct TtsParams<'a> {
+    text: &'a str,
+    instruct: &'a str,
     speed: f32,
-    output_path: &Path,
-    ref_audio: Option<&str>,
-    ref_text: Option<&str>,
-) -> Result<std::process::ExitStatus> {
+    output_path: &'a Path,
+    ref_audio: Option<&'a str>,
+    ref_text: Option<&'a str>,
+    voice: Option<&'a str>,
+}
+
+fn run_tts_command(cfg: &Config, params: &TtsParams) -> Result<std::process::ExitStatus> {
     let python = config::expand_path(&cfg.python_path);
     let model = model_id(cfg)?;
 
     // Ensure output directory exists
-    if let Some(parent) = output_path.parent() {
+    if let Some(parent) = params.output_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
@@ -219,15 +246,23 @@ fn run_tts_command(
     }
 
     cmd.args(["--model", &model]);
-    cmd.args(["--text", text]);
-    cmd.args(["--instruct", instruct]);
-    cmd.args(["--speed", &speed.to_string()]);
-    cmd.args(["--output_path", &output_path.to_string_lossy()]);
+    cmd.args(["--text", params.text]);
+    cmd.args(["--instruct", params.instruct]);
+    cmd.args(["--speed", &params.speed.to_string()]);
+    cmd.args(["--output_path", &params.output_path.to_string_lossy()]);
 
-    if let Some(ref_audio) = ref_audio {
+    // Use --voice to enforce consistent voice across all chunks
+    if let Some(voice) = params.voice {
+        cmd.args(["--voice", voice]);
+    }
+
+    // Join all audio chunks into a single file instead of a directory of fragments
+    cmd.arg("--join_audio");
+
+    if let Some(ref_audio) = params.ref_audio {
         cmd.args(["--ref_audio", ref_audio]);
     }
-    if let Some(ref_text) = ref_text {
+    if let Some(ref_text) = params.ref_text {
         cmd.args(["--ref_text", ref_text]);
     }
 
