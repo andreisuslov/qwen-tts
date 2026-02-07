@@ -25,7 +25,7 @@ fn prompt_yn(question: &str, default_yes: bool) -> bool {
     input.starts_with('y')
 }
 
-fn repo_id(backend: Backend, variant: &str) -> Result<&'static str> {
+pub fn repo_id(backend: Backend, variant: &str) -> Result<&'static str> {
     match (backend, variant) {
         (Backend::Mlx, "pro") => Ok("mlx-community/Qwen3-TTS-bf16"),
         (Backend::Mlx, "lite") => Ok("mlx-community/Qwen3-TTS-4bit"),

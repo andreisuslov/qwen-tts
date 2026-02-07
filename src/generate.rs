@@ -4,6 +4,7 @@ use std::process::Command;
 
 use crate::config::{self, Config};
 use crate::editor;
+use crate::models;
 use crate::output;
 use crate::platform::Backend;
 use anyhow::{Context, Result};
@@ -67,9 +68,16 @@ fn resolve_output(output: Option<&str>, cfg: &Config) -> PathBuf {
     }
 }
 
-fn model_path(cfg: &Config) -> PathBuf {
-    let models_dir = config::expand_path(&cfg.models_dir);
-    models_dir.join(&cfg.model_variant)
+/// Returns the model identifier — local path if downloaded, otherwise HuggingFace repo ID.
+fn model_id(cfg: &Config) -> String {
+    let local = config::expand_path(&cfg.models_dir).join(&cfg.model_variant);
+    if local.exists() {
+        return local.to_string_lossy().to_string();
+    }
+    // Fall back to HuggingFace repo ID (mlx_audio / transformers will download and cache it)
+    models::repo_id(cfg.backend, &cfg.model_variant)
+        .unwrap_or("mlx-community/Qwen3-TTS-bf16")
+        .to_string()
 }
 
 pub fn speak(args: SpeakArgs) -> Result<()> {
@@ -191,7 +199,7 @@ fn run_tts_command(
     ref_text: Option<&str>,
 ) -> Result<std::process::ExitStatus> {
     let python = config::expand_path(&cfg.python_path);
-    let model = model_path(cfg);
+    let model = model_id(cfg);
 
     // Ensure output directory exists
     if let Some(parent) = output_path.parent() {
@@ -210,7 +218,7 @@ fn run_tts_command(
         }
     }
 
-    cmd.args(["--model", &model.to_string_lossy()]);
+    cmd.args(["--model", &model]);
     cmd.args(["--text", text]);
     cmd.args(["--instruct", instruct]);
     cmd.args(["--speed", &speed.to_string()]);
