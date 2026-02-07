@@ -36,7 +36,7 @@ impl std::str::FromStr for Backend {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Os {
-    MacOs,
+    Mac,
     Windows,
     Linux,
 }
@@ -44,7 +44,7 @@ pub enum Os {
 impl fmt::Display for Os {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Os::MacOs => write!(f, "macOS"),
+            Os::Mac => write!(f, "macOS"),
             Os::Windows => write!(f, "Windows"),
             Os::Linux => write!(f, "Linux"),
         }
@@ -53,7 +53,7 @@ impl fmt::Display for Os {
 
 pub fn detect_os() -> Os {
     if cfg!(target_os = "macos") {
-        Os::MacOs
+        Os::Mac
     } else if cfg!(target_os = "windows") {
         Os::Windows
     } else {
@@ -62,11 +62,7 @@ pub fn detect_os() -> Os {
 }
 
 pub fn is_apple_silicon() -> bool {
-    if cfg!(target_os = "macos") {
-        cfg!(target_arch = "aarch64")
-    } else {
-        false
-    }
+    cfg!(target_os = "macos") && cfg!(target_arch = "aarch64")
 }
 
 pub fn has_nvidia_gpu() -> bool {
@@ -81,7 +77,7 @@ pub fn has_nvidia_gpu() -> bool {
 pub fn detect_backend() -> Backend {
     let os = detect_os();
     match os {
-        Os::MacOs if is_apple_silicon() => Backend::Mlx,
+        Os::Mac if is_apple_silicon() => Backend::Mlx,
         _ if has_nvidia_gpu() => Backend::Cuda,
         _ => Backend::Cpu,
     }

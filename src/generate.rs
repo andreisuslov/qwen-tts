@@ -1,12 +1,12 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result};
 use crate::config::{self, Config};
 use crate::editor;
 use crate::output;
 use crate::platform::Backend;
+use anyhow::{Context, Result};
 
 pub struct SpeakArgs {
     pub text: Option<String>,
@@ -139,7 +139,10 @@ pub fn clone(args: CloneArgs) -> Result<()> {
         let wav = voices_dir.join(format!("{voice_name}.wav"));
         let txt = voices_dir.join(format!("{voice_name}.txt"));
         if !wav.exists() {
-            anyhow::bail!("voice '{voice_name}' not found (no {}.wav in voices dir)", voice_name);
+            anyhow::bail!(
+                "voice '{voice_name}' not found (no {}.wav in voices dir)",
+                voice_name
+            );
         }
         let transcript = if txt.exists() {
             Some(fs::read_to_string(&txt).context("failed to read voice transcript")?)
@@ -183,7 +186,7 @@ fn run_tts_command(
     text: &str,
     instruct: &str,
     speed: f32,
-    output_path: &PathBuf,
+    output_path: &Path,
     ref_audio: Option<&str>,
     ref_text: Option<&str>,
 ) -> Result<std::process::ExitStatus> {
@@ -226,7 +229,7 @@ fn run_tts_command(
         .context("failed to run TTS command")
 }
 
-fn play_audio(path: &PathBuf) -> Result<()> {
+fn play_audio(path: &Path) -> Result<()> {
     output::status("Playing", &path.to_string_lossy());
 
     let status = if cfg!(target_os = "macos") {

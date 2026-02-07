@@ -41,7 +41,10 @@ fn model_dir(cfg: &Config, variant: &str) -> PathBuf {
 
 fn is_model_installed(cfg: &Config, variant: &str) -> bool {
     let dir = model_dir(cfg, variant);
-    dir.exists() && fs::read_dir(&dir).map(|mut d| d.next().is_some()).unwrap_or(false)
+    dir.exists()
+        && fs::read_dir(&dir)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false)
 }
 
 /// Try downloading with Python huggingface_hub, fall back to git clone.
@@ -168,11 +171,7 @@ pub fn update(variant: Option<&str>) -> Result<()> {
     let dest = model_dir(&cfg, variant);
 
     if dest.exists() {
-        eprintln!(
-            "{} {} to latest version...",
-            "Updating".cyan().bold(),
-            repo
-        );
+        eprintln!("{} {} to latest version...", "Updating".cyan().bold(), repo);
         // If it's a git repo, try git pull first
         let is_git = dest.join(".git").exists();
         if is_git {

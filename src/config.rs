@@ -65,17 +65,14 @@ pub fn load() -> Result<Config> {
         let cfg = Config::default();
         ensure_dirs(&cfg)?;
         save(&cfg)?;
-        eprintln!(
-            "First run — config created at {}",
-            path.display()
-        );
+        eprintln!("First run — config created at {}", path.display());
         eprintln!("Platform: {}", platform::platform_summary());
         eprintln!();
         models::auto_download_if_needed(&cfg);
         return Ok(cfg);
     }
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
     let cfg: Config =
         toml::from_str(&text).with_context(|| format!("failed to parse {}", path.display()))?;
     Ok(cfg)
@@ -87,8 +84,7 @@ pub fn load_or_default() -> Config {
 
 fn ensure_dirs(cfg: &Config) -> Result<()> {
     for dir in [&cfg.models_dir, &cfg.voices_dir, &cfg.output_dir] {
-        fs::create_dir_all(dir)
-            .with_context(|| format!("failed to create directory {dir}"))?;
+        fs::create_dir_all(dir).with_context(|| format!("failed to create directory {dir}"))?;
     }
     Ok(())
 }
