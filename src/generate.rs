@@ -68,16 +68,16 @@ fn resolve_output(output: Option<&str>, cfg: &Config) -> PathBuf {
     }
 }
 
-/// Returns the model identifier — local path if downloaded, otherwise HuggingFace repo ID.
-fn model_id(cfg: &Config) -> String {
+/// Returns the model path or repo ID. Prefers local, downloads if missing.
+fn model_id(cfg: &Config) -> Result<String> {
     let local = config::expand_path(&cfg.models_dir).join(&cfg.model_variant);
     if local.exists() {
-        return local.to_string_lossy().to_string();
+        return Ok(local.to_string_lossy().to_string());
     }
-    // Fall back to HuggingFace repo ID (mlx_audio / transformers will download and cache it)
-    models::repo_id(cfg.backend, &cfg.model_variant)
-        .unwrap_or("mlx-community/Qwen3-TTS-bf16")
-        .to_string()
+    // Model not installed — download it now
+    output::status("Model", "not found locally, downloading...");
+    models::download(&cfg.model_variant)?;
+    Ok(local.to_string_lossy().to_string())
 }
 
 pub fn speak(args: SpeakArgs) -> Result<()> {
@@ -199,7 +199,7 @@ fn run_tts_command(
     ref_text: Option<&str>,
 ) -> Result<std::process::ExitStatus> {
     let python = config::expand_path(&cfg.python_path);
-    let model = model_id(cfg);
+    let model = model_id(cfg)?;
 
     // Ensure output directory exists
     if let Some(parent) = output_path.parent() {
@@ -238,9 +238,33 @@ fn run_tts_command(
 }
 
 fn play_audio(path: &Path) -> Result<()> {
-    output::status("Playing", &path.to_string_lossy());
+    // mlx_audio may create a directory of chunks instead of a single file
+    let files = if path.is_dir() {
+        let mut wavs: Vec<_> = fs::read_dir(path)?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("wav"))
+            .collect();
+        wavs.sort();
+        wavs
+    } else {
+        vec![path.to_path_buf()]
+    };
 
-    let status = if cfg!(target_os = "macos") {
+    for file in &files {
+        output::status("Playing", &file.to_string_lossy());
+        let status = play_single(file);
+        match status {
+            Ok(s) if s.success() => {}
+            Ok(_) => output::warn("Audio playback finished with non-zero exit code"),
+            Err(e) => output::warn(&format!("Could not play audio: {e}")),
+        }
+    }
+    Ok(())
+}
+
+fn play_single(path: &Path) -> std::result::Result<std::process::ExitStatus, std::io::Error> {
+    if cfg!(target_os = "macos") {
         Command::new("afplay")
             .arg(path.to_string_lossy().as_ref())
             .status()
@@ -255,7 +279,6 @@ fn play_audio(path: &Path) -> Result<()> {
             ])
             .status()
     } else {
-        // Linux: try aplay, then paplay, then ffplay
         Command::new("aplay")
             .arg(path.to_string_lossy().as_ref())
             .status()
@@ -270,17 +293,5 @@ fn play_audio(path: &Path) -> Result<()> {
                     .arg(path.to_string_lossy().as_ref())
                     .status()
             })
-    };
-
-    match status {
-        Ok(s) if s.success() => Ok(()),
-        Ok(_) => {
-            output::warn("Audio playback finished with non-zero exit code");
-            Ok(())
-        }
-        Err(e) => {
-            output::warn(&format!("Could not play audio: {e}"));
-            Ok(())
-        }
     }
 }

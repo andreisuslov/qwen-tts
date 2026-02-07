@@ -38,7 +38,7 @@ impl Default for Config {
             default_voice: "Vivian".to_string(),
             default_speed: 1.0,
             auto_play: true,
-            model_variant: "pro".to_string(),
+            model_variant: "base".to_string(),
         }
     }
 }
@@ -138,8 +138,16 @@ pub fn set(key: &str, value: &str) -> Result<()> {
                 .with_context(|| format!("invalid bool: {value}"))?;
         }
         "model_variant" => {
-            if value != "pro" && value != "lite" {
-                anyhow::bail!("model_variant must be 'pro' or 'lite'");
+            let valid = [
+                "base",
+                "base-4bit",
+                "custom",
+                "custom-4bit",
+                "design",
+                "design-4bit",
+            ];
+            if !valid.contains(&value) {
+                anyhow::bail!("model_variant must be one of: {}", valid.join(", "));
             }
             cfg.model_variant = value.to_string();
         }
