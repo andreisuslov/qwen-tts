@@ -63,8 +63,33 @@ fn resolve_output(output: Option<&str>, cfg: &Config) -> PathBuf {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
-            dir.join(format!("tts_{ts}.wav"))
+            dir.join(format!("tts_{ts}"))
         }
+    }
+}
+
+/// Find the actual audio file produced by mlx_audio.
+/// With --join_audio it creates a single audio.wav inside the output directory.
+fn find_output_file(output_dir: &Path) -> Option<PathBuf> {
+    if output_dir.is_dir() {
+        // --join_audio produces audio.wav in the directory
+        let joined = output_dir.join("audio.wav");
+        if joined.exists() {
+            return Some(joined);
+        }
+        // Fallback: first wav file found
+        let mut wavs: Vec<_> = fs::read_dir(output_dir)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("wav"))
+            .collect();
+        wavs.sort();
+        wavs.into_iter().next()
+    } else if output_dir.exists() {
+        Some(output_dir.to_path_buf())
+    } else {
+        None
     }
 }
 
@@ -112,10 +137,11 @@ pub fn speak(args: SpeakArgs) -> Result<()> {
         anyhow::bail!("TTS generation failed");
     }
 
-    output::success(&format!("Saved to {}", out.display()));
+    let actual = find_output_file(&out).unwrap_or(out);
+    output::success(&format!("Saved to {}", actual.display()));
 
     if cfg.auto_play {
-        play_audio(&out)?;
+        play_audio(&actual)?;
     }
 
     Ok(())
@@ -148,10 +174,11 @@ pub fn design(args: DesignArgs) -> Result<()> {
         anyhow::bail!("TTS generation failed");
     }
 
-    output::success(&format!("Saved to {}", out.display()));
+    let actual = find_output_file(&out).unwrap_or(out);
+    output::success(&format!("Saved to {}", actual.display()));
 
     if cfg.auto_play {
-        play_audio(&out)?;
+        play_audio(&actual)?;
     }
 
     Ok(())
@@ -205,10 +232,11 @@ pub fn clone(args: CloneArgs) -> Result<()> {
         anyhow::bail!("TTS generation failed");
     }
 
-    output::success(&format!("Saved to {}", out.display()));
+    let actual = find_output_file(&out).unwrap_or(out);
+    output::success(&format!("Saved to {}", actual.display()));
 
     if cfg.auto_play {
-        play_audio(&out)?;
+        play_audio(&actual)?;
     }
 
     Ok(())
