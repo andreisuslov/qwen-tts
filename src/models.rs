@@ -27,11 +27,30 @@ fn prompt_yn(question: &str, default_yes: bool) -> bool {
 
 pub fn repo_id(backend: Backend, variant: &str) -> Result<&'static str> {
     match (backend, variant) {
-        (Backend::Mlx, "pro") => Ok("mlx-community/Qwen3-TTS-bf16"),
-        (Backend::Mlx, "lite") => Ok("mlx-community/Qwen3-TTS-4bit"),
-        (_, "pro") => Ok("Qwen/Qwen3-TTS"),
-        (_, "lite") => Ok("Qwen/Qwen3-TTS"),
-        _ => anyhow::bail!("unknown variant: {variant} (expected 'pro' or 'lite')"),
+        // Base: standard TTS + voice cloning (0.6B)
+        (Backend::Mlx, "base") => Ok("mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16"),
+        (Backend::Mlx, "base-4bit") => Ok("mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit"),
+        // CustomVoice: voice cloning focused (0.6B)
+        (Backend::Mlx, "custom") => Ok("mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-bf16"),
+        (Backend::Mlx, "custom-4bit") => Ok("mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit"),
+        // VoiceDesign: create voices from descriptions (1.7B)
+        (Backend::Mlx, "design") => Ok("mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16"),
+        (Backend::Mlx, "design-4bit") => Ok("mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-4bit"),
+        // PyTorch (CUDA/CPU)
+        (_, "base") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        (_, "base-4bit") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        (_, "custom") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        (_, "custom-4bit") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        (_, "design") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        (_, "design-4bit") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        // Legacy aliases
+        (Backend::Mlx, "pro") => Ok("mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16"),
+        (Backend::Mlx, "lite") => Ok("mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit"),
+        (_, "pro") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        (_, "lite") => Ok("Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
+        _ => anyhow::bail!(
+            "unknown variant: {variant}\nAvailable: base, base-4bit, custom, custom-4bit, design, design-4bit"
+        ),
     }
 }
 
